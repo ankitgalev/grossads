@@ -29,7 +29,7 @@ Route::match(
     ['GET', 'POST'],
     '/webhooks/meta/leadgen',
     [MetaLeadWebhookController::class, 'handle']
-)->name('meta.leadgen.webhook');
+)->name('meta.leadgen.webhook');      
 
 Route::match(['POST'], '/tunnel-test', function (Request $request) {
     return response()->json([
