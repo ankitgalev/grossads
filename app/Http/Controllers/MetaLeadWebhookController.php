@@ -1,0 +1,352 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Models\MetaIntegration;
+use App\Models\MetaLeadLog;
+use App\Models\Lead;
+use App\Models\LeadValue;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+use Throwable;
+
+class MetaLeadWebhookController extends Controller
+{
+    public function handle(Request $request)
+    {
+        // Meta's initial webhook verification handshake.
+        if ($request->isMethod('get')) {
+            return $this->verifyWebhook($request);
+        }
+
+        $rawBody = $request->getContent();
+        $payload = json_decode($rawBody, true);
+
+        if (!is_array($payload) || !isset($payload['entry'])) {
+            return response('Invalid payload', 400);
+        }
+
+        $hasFailure = false;
+
+        foreach ($payload['entry'] as $entry) {
+            $pageId = isset($entry['id']) ? (string) $entry['id'] : '';
+
+            if (empty($entry['changes']) || !is_array($entry['changes'])) {
+                continue;
+            }
+
+            foreach ($entry['changes'] as $change) {
+                if (!isset($change['field']) || $change['field'] !== 'leadgen') {
+                    continue;
+                }
+
+                $value = isset($change['value']) && is_array($change['value'])
+                    ? $change['value'] : [];
+
+                $leadId = isset($value['leadgen_id'])
+                    ? (string) $value['leadgen_id'] : '';
+
+                $formId = isset($value['form_id'])
+                    ? (string) $value['form_id'] : '';
+
+                $eventPageId = !empty($value['page_id'])
+                    ? (string) $value['page_id'] : $pageId;
+
+                if ($leadId === '' || $eventPageId === '') {
+                    Log::warning('Meta webhook: missing leadgen_id or page_id.');
+                    continue;
+                }
+
+                $integration = $this->findIntegration($eventPageId, $formId);
+
+                // Unknown, disabled, or unmatched Page/Form.
+                if (!$integration) {
+                    Log::warning('Meta webhook: no active matching integration.', [
+                        'page_id' => $eventPageId,
+                        'form_id' => $formId,
+                        'leadgen_id' => $leadId,
+                    ]);
+                    continue;
+                }
+
+                // Validate the raw, unmodified request body with the App Secret.
+                $signature = (string) $request->header('X-Hub-Signature-256', '');
+                $expected = 'sha256=' . hash_hmac(
+                    'sha256',
+                    $rawBody,
+                    $integration->app_secret
+                );
+
+                if ($integration->app_secret === '' ||
+                    $signature === '' ||
+                    !hash_equals($expected, $signature)) {
+                    Log::warning('Meta webhook signature validation failed.', [
+                        'page_id' => $eventPageId,
+                    ]);
+
+                    return response('Invalid signature', 403);
+                }
+
+                try {
+                    $this->processLead(
+                        $integration,
+                        $leadId,
+                        $eventPageId,
+                        $formId
+                    );
+                } catch (Throwable $e) {
+                    $hasFailure = true;
+
+                    Log::error('Meta lead processing failed.', [
+                        'leadgen_id' => $leadId,
+                        'page_id' => $eventPageId,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    $log = MetaLeadLog::where('meta_lead_id', $leadId)->first();
+
+                    if ($log) {
+                        $log->status = 'failed';
+                        $log->error_message = substr($e->getMessage(), 0, 60000);
+                        $log->save();
+                    }
+                }
+            }
+        }
+
+        // A non-200 response allows Meta to retry failed deliveries.
+        if ($hasFailure) {
+            return response('Lead processing failed; retry delivery.', 500);
+        }
+
+        return response('EVENT_RECEIVED', 200);
+    }
+
+    private function verifyWebhook(Request $request)
+    {
+        $mode = $request->query('hub_mode', $request->query('hub.mode'));
+        $token = $request->query('hub_verify_token', $request->query('hub.verify_token'));
+        $challenge = $request->query('hub_challenge', $request->query('hub.challenge'));
+
+        if ($mode !== 'subscribe' || $token === null || $challenge === null) {
+            return response('Forbidden', 403);
+        }
+
+        // Compare against configured integrations; token is encrypted at rest.
+        $integrations = MetaIntegration::all();
+
+        foreach ($integrations as $integration) {
+            if ($integration->verify_token !== '' &&
+                hash_equals((string) $integration->verify_token, (string) $token)) {
+                return response((string) $challenge, 200)
+                    ->header('Content-Type', 'text/plain');
+            }
+        }
+
+        return response('Forbidden', 403);
+    }
+
+    private function findIntegration($pageId, $formId)
+    {
+        $integrations = MetaIntegration::where('page_id', $pageId)
+            ->where('status', true)
+            ->get();
+
+        // Prefer an exact Form ID match.
+        foreach ($integrations as $integration) {
+            if ($formId !== '' &&
+                $integration->form_id !== null &&
+                (string) $integration->form_id === (string) $formId) {
+                return $integration;
+            }
+        }
+
+        // An empty configured Form ID means "accept all forms for this Page".
+        foreach ($integrations as $integration) {
+            if (empty($integration->form_id)) {
+                return $integration;
+            }
+        }
+
+        return null;
+    }
+
+    private function processLead(
+        MetaIntegration $integration,
+        $metaLeadId,
+        $pageId,
+        $formId
+    ) {
+        $existingLog = MetaLeadLog::where('meta_lead_id', $metaLeadId)->first();
+
+        if ($existingLog && $existingLog->status === 'processed') {
+            return; // Duplicate webhook delivery: already saved.
+        }
+
+        if (!$existingLog) {
+            $existingLog = new MetaLeadLog();
+            $existingLog->integration_id = $integration->id;
+            $existingLog->meta_lead_id = $metaLeadId;
+        }
+
+        $existingLog->page_id = $pageId;
+        $existingLog->form_id = $formId ?: null;
+        $existingLog->status = 'processing';
+        $existingLog->error_message = null;
+        $existingLog->save();
+
+        try {
+            $version = env('META_GRAPH_VERSION', 'v26.0');
+            $version = trim($version, '/');
+
+            $response = Http::timeout(25)->get(
+                'https://graph.facebook.com/' . $version . '/' . $metaLeadId,
+                [
+                    'fields' => 'id,created_time,form_id,field_data,ad_id',
+                    'access_token' => $integration->page_access_token,
+                ]
+            );
+
+            if (!$response->successful()) {
+                throw new \RuntimeException(
+                    'Meta Graph API returned HTTP ' . $response->status() .
+                    ': ' . $response->body()
+                );
+            }
+
+            $metaData = $response->json();
+
+            if (!is_array($metaData) || empty($metaData['id'])) {
+                throw new \RuntimeException('Meta API response did not contain a lead ID.');
+            }
+
+            $campaign = $integration->campaign;
+
+            if (!$campaign) {
+                throw new \RuntimeException('Configured GrossAds campaign no longer exists.');
+            }
+
+            $fieldData = [];
+            foreach ((array) (isset($metaData['field_data']) ? $metaData['field_data'] : []) as $item) {
+                if (!isset($item['name'])) {
+                    continue;
+                }
+
+                $fieldName = $this->normaliseKey($item['name']);
+                $values = isset($item['values']) ? $item['values'] : [];
+                $fieldData[$fieldName] = is_array($values)
+                    ? implode(', ', array_map('strval', $values))
+                    : (string) $values;
+            }
+
+            DB::transaction(function () use (
+                $integration,
+                $metaLeadId,
+                $metaData,
+                $fieldData,
+                $campaign,
+                $existingLog
+            ) {
+                // A prior failed attempt may already have created the GrossAds lead.
+                $lead = Lead::where('lead_reference', 'META-' . $metaLeadId)->first();
+
+                if (!$lead) {
+                    $lead = new Lead();
+                    $lead->campaign_id = $campaign->id;
+                    $lead->publisher_id = $integration->publisher_id;
+                    $lead->advertiser_id = $campaign->advertiser_id;
+                    $lead->lead_reference = 'META-' . $metaLeadId;
+                    $lead->status = 'new';
+                    $lead->source = 'meta_lead_ads';
+                    $lead->ip_address = null;
+                    $lead->user_agent = 'Meta Lead Ads Webhook';
+
+                    if (!empty($metaData['created_time'])) {
+                        $lead->submitted_at = Carbon::parse($metaData['created_time']);
+                    } else {
+                        $lead->submitted_at = Carbon::now();
+                    }
+
+                    $lead->save();
+                }
+
+                // Match Meta's field names to the dynamic fields configured in GrossAds.
+                $fields = $campaign->fields()->get();
+
+                foreach ($fields as $campaignField) {
+                    $candidateKeys = [
+                        $this->normaliseKey($campaignField->field_key),
+                        $this->normaliseKey($campaignField->field_name),
+                    ];
+
+                    // Common Meta/GrossAds field name differences.
+                    $aliases = [
+                        'name' => ['fullname', 'full_name', 'name'],
+                        'fullname' => ['fullname', 'full_name', 'name'],
+                        'email' => ['email', 'emailaddress'],
+                        'phone' => ['phone', 'phonenumber', 'mobile', 'mobilephone'],
+                        'mobile' => ['mobile', 'phonenumber', 'phone', 'mobilephone'],
+                        'city' => ['city', 'town'],
+                        'state' => ['state', 'province'],
+                        'zip' => ['zip', 'zipcode', 'postalcode', 'postcode'],
+                        'country' => ['country'],
+                    ];
+
+                    foreach ($candidateKeys as $candidateKey) {
+                        if (isset($aliases[$candidateKey])) {
+                            $candidateKeys = array_merge(
+                                $candidateKeys,
+                                $aliases[$candidateKey]
+                            );
+                        }
+                    }
+
+                    $candidateKeys = array_unique($candidateKeys);
+                    $matchedValue = null;
+                    $found = false;
+
+                    foreach ($candidateKeys as $key) {
+                        if ($key !== '' && array_key_exists($key, $fieldData)) {
+                            $matchedValue = $fieldData[$key];
+                            $found = true;
+                            break;
+                        }
+                    }
+
+                    if (!$found) {
+                        continue;
+                    }
+
+                    $leadValue = LeadValue::firstOrNew([
+                        'lead_id' => $lead->id,
+                        'campaign_field_id' => $campaignField->id,
+                    ]);
+
+                    $leadValue->field_value = $matchedValue;
+                    $leadValue->save();
+                }
+
+                $existingLog->lead_id = $lead->id;
+                $existingLog->status = 'processed';
+                $existingLog->error_message = null;
+                $existingLog->save();
+            });
+        } catch (Throwable $e) {
+            $existingLog->status = 'failed';
+            $existingLog->error_message = substr($e->getMessage(), 0, 60000);
+            $existingLog->save();
+
+            throw $e;
+        }
+    }
+
+    private function normaliseKey($value)
+    {
+        return strtolower(preg_replace('/[^a-zA-Z0-9]/', '', (string) $value));
+    }
+}
