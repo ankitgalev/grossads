@@ -82,14 +82,26 @@ class MetaLeadWebhookController extends Controller
                     $integration->app_secret
                 );
 
-                if ($integration->app_secret === '' ||
-                    $signature === '' ||
-                    !hash_equals($expected, $signature)) {
-                    Log::warning('Meta webhook signature validation failed.', [
-                        'page_id' => $eventPageId,
-                    ]);
+                // if ($integration->app_secret === '' ||
+                //     $signature === '' ||
+                //     !hash_equals($expected, $signature)) {
+                //     Log::warning('Meta webhook signature validation failed.', [
+                //         'page_id' => $eventPageId,
+                //     ]);
 
-                    return response('Invalid signature', 403);
+                //     return response('Invalid signature', 403);
+                // }
+                // Validate only if app_secret is configured
+                if ($integration->app_secret !== '') {
+                    $signature = (string) $request->header('X-Hub-Signature-256', '');
+                    $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $integration->app_secret);
+
+                    if ($signature === '' || !hash_equals($expected, $signature)) {
+                        Log::warning('Meta webhook signature validation failed.', [
+                            'page_id' => $eventPageId,
+                        ]);
+                        return response('Invalid signature', 403);
+                    }
                 }
 
                 try {
@@ -127,25 +139,58 @@ class MetaLeadWebhookController extends Controller
         return response('EVENT_RECEIVED', 200);
     }
 
+    // private function verifyWebhook(Request $request)
+    // {
+    //     $mode = $request->query('hub_mode', $request->query('hub.mode'));
+    //     $token = $request->query('hub_verify_token', $request->query('hub.verify_token'));
+    //     $challenge = $request->query('hub_challenge', $request->query('hub.challenge'));
+
+    //     if ($mode !== 'subscribe' || $token === null || $challenge === null) {
+    //         return response('Forbidden', 403);
+    //     }
+
+    //     // Compare against configured integrations; token is encrypted at rest.
+    //     $integrations = MetaIntegration::all();
+
+    //     foreach ($integrations as $integration) {
+    //         if ($integration->verify_token !== '' &&
+    //             hash_equals((string) $integration->verify_token, (string) $token)) {
+    //             return response((string) $challenge, 200)
+    //                 ->header('Content-Type', 'text/plain');
+    //         }
+    //     }
+
+    //     return response('Forbidden', 403);
+    // }
     private function verifyWebhook(Request $request)
     {
-        $mode = $request->query('hub_mode', $request->query('hub.mode'));
-        $token = $request->query('hub_verify_token', $request->query('hub.verify_token'));
-        $challenge = $request->query('hub_challenge', $request->query('hub.challenge'));
+        $mode = $request->query('hub_mode') ?? $request->query('hub.mode') ?? $request->input('hub.mode');
+        $token = $request->query('hub_verify_token') ?? $request->query('hub.verify_token') ?? $request->input('hub.verify_token');
+        $challenge = $request->query('hub_challenge') ?? $request->query('hub.challenge') ?? $request->input('hub.challenge');
 
         if ($mode !== 'subscribe' || $token === null || $challenge === null) {
             return response('Forbidden', 403);
         }
 
-        // Compare against configured integrations; token is encrypted at rest.
-        $integrations = MetaIntegration::all();
+        // 1. HARDCODED fallback - lets you verify even when DB is empty
+        if (hash_equals('GrossAdsLeadIntegration0099774567', (string) $token)) {
+            return response((string) $challenge, 200)
+                ->header('Content-Type', 'text/plain');
+        }
 
-        foreach ($integrations as $integration) {
-            if ($integration->verify_token !== '' &&
-                hash_equals((string) $integration->verify_token, (string) $token)) {
-                return response((string) $challenge, 200)
-                    ->header('Content-Type', 'text/plain');
+        // 2. Then check DB
+        try {
+            $integrations = MetaIntegration::all();
+            foreach ($integrations as $integration) {
+                if ($integration->verify_token !== '' &&
+                    hash_equals((string) $integration->verify_token, (string) $token)) {
+                    return response((string) $challenge, 200)
+                        ->header('Content-Type', 'text/plain');
+                }
             }
+        } catch (\Throwable $e) {
+            Log::error('verifyWebhook DB error: '.$e->getMessage());
+            // don't throw, still return 403 so Meta gets a proper response
         }
 
         return response('Forbidden', 403);
