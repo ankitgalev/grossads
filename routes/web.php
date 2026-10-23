@@ -32,7 +32,8 @@ use App\Http\Controllers\Admin\MetaIntegrationController;
 Route::get('/', function () {
     return redirect()->route('login');
 });
-
+Route::view('/privacy', 'privacy');
+Route::view('/terms', 'terms');
 
 /*
 |--------------------------------------------------------------------------
