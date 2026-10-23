@@ -164,9 +164,9 @@ class MetaLeadWebhookController extends Controller
     private function processLead(MetaIntegration $integration, $metaLeadId, $pageId, $formId)
     {
         // --- TEST MODE: 44444 ke liye fake lead banao ---
-    if ($leadId === '444444444444' || $pageId === '444444444444') {
+    if ($metaLeadId === '444444444444' || $pageId === '444444444444') {
         $log = MetaLeadLog::create([
-            'meta_lead_id' => $leadId,
+            'meta_lead_id' => $metaLeadId,
             '【entity-meta¦canonical_name=Meta】_integration_id' => $integration->id,
             'form_id' => $formId,
             'page_id' => $pageId,
@@ -177,13 +177,13 @@ class MetaLeadWebhookController extends Controller
 
         // Fake lead entry in leads table
         \App\Models\Lead::create([
-            'meta_lead_id' => $leadId,
+            'meta_lead_id' => $metaLeadId,
             'meta_integration_id' => $integration->id,
             'form_id' => $formId ?? 'test_form',
             'page_id' => $pageId,
             'campaign_id' => $integration->campaign_id,
             'publisher_id' => $integration->publisher_id,
-            'full_name' => 'Test User (Webhook)',
+            'first_name' => 'Test User (Webhook)',
             'email' => 'test@webhook.com',
             'phone' => '9999999999',
             'raw_data' => json_encode(['test' => true, 'note' => 'This is dummy webhook test']),
