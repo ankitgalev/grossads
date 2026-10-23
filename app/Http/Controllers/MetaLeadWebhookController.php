@@ -190,7 +190,7 @@ class MetaLeadWebhookController extends Controller
             'status' => 'new',
         ]);
 
-        Log::info('Test lead created successfully', ['lead_id' => $leadId]);
+        Log::info('Test lead created successfully', ['lead_id' => $metaLeadId]);
         return;
     }
     // --- TEST MODE END ---
