@@ -164,36 +164,51 @@ class MetaLeadWebhookController extends Controller
     private function processLead(MetaIntegration $integration, $metaLeadId, $pageId, $formId)
     {
         // --- TEST MODE: 44444 ke liye fake lead banao ---
-    if ($metaLeadId === '444444444444' || $pageId === '444444444444') {
-        $log = MetaLeadLog::create([
-            'meta_lead_id' => $metaLeadId,
-            '【entity-meta¦canonical_name=Meta】_integration_id' => $integration->id,
-            'form_id' => $formId,
-            'page_id' => $pageId,
-            'status' => 'processed',
-            'error_message' => null,
-            'raw_payload' => json_encode(['test' => true]),
-        ]);
+        if ($metaLeadId === '444444444444' || $pageId === '444444444444') {
+            $existingLog = MetaLeadLog::where('meta_lead_id', $metaLeadId)->first();
+            if ($existingLog && $existingLog->status === 'processed') {
+                return;
+            }
+            if (!$existingLog) {
+                $existingLog = new MetaLeadLog();
+                $existingLog->meta_lead_id = $metaLeadId;
+                $existingLog->integration_id = $integration->id;
+            }
+            $existingLog->page_id = $pageId;
+            $existingLog->form_id = $formId ?: null;
+            $existingLog->status = 'processing';
+            $existingLog->save();
 
-        // Fake lead entry in leads table
-        \App\Models\Lead::create([
-            'meta_lead_id' => $metaLeadId,
-            'meta_integration_id' => $integration->id,
-            'form_id' => $formId ?? 'test_form',
-            'page_id' => $pageId,
-            'campaign_id' => $integration->campaign_id,
-            'publisher_id' => $integration->publisher_id,
-            'first_name' => 'Test User (Webhook)',
-            'email' => 'test@webhook.com',
-            'phone' => '9999999999',
-            'raw_data' => json_encode(['test' => true, 'note' => 'This is dummy webhook test']),
-            'status' => 'new',
-        ]);
-
-        Log::info('Test lead created successfully', ['lead_id' => $metaLeadId]);
-        return;
-    }
-    // --- TEST MODE END ---
+            try {
+                DB::transaction(function () use ($integration, $metaLeadId, $existingLog) {
+                    $campaign = $integration->campaign;
+                    $lead = Lead::where('lead_reference', 'META-' . $metaLeadId)->first();
+                    if (!$lead) {
+                        $lead = new Lead();
+                        $lead->campaign_id = $integration->campaign_id;
+                        $lead->publisher_id = $integration->publisher_id;
+                        $lead->advertiser_id = $campaign ? $campaign->advertiser_id : 1;
+                        $lead->lead_reference = 'META-' . $metaLeadId;
+                        $lead->status = 'new';
+                        $lead->source = 'meta_lead_ads_test';
+                        $lead->user_agent = 'Meta Test Webhook 44444';
+                        $lead->submitted_at = Carbon::now();
+                        $lead->save();
+                    }
+                    $existingLog->lead_id = $lead->id;
+                    $existingLog->status = 'processed';
+                    $existingLog->save();
+                });
+                Log::info('Test lead created successfully', ['lead_id' => $metaLeadId]);
+            } catch (Throwable $e) {
+                $existingLog->status = 'failed';
+                $existingLog->error_message = $e->getMessage();
+                $existingLog->save();
+                throw $e;
+            }
+            return;
+        }
+        // --- TEST MODE END ---
         $existingLog = MetaLeadLog::where('meta_lead_id', $metaLeadId)->first();
         if ($existingLog && $existingLog->status === 'processed') return;
 
