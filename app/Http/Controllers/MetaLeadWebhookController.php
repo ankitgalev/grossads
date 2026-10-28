@@ -141,25 +141,64 @@ class MetaLeadWebhookController extends Controller
     //     }
     //     return null;
     // }
+    // private function findIntegration(?string $pageId, ?string $formId): ?MetaIntegration
+    // {
+    //     if (empty($pageId)) return null;
+
+    //     // TEST MODE: Agar Meta 44444 bhejta hai to pehla active integration le lo
+    //     if ($pageId === '444444444444' || $formId === '444444444444') {
+    //         return MetaIntegration::where('status', true)->whereNotNull('page_id')->first();
+    //     }
+
+    //     // Normal logic
+    //     $base = MetaIntegration::where('page_id', $pageId)->where('status', true);
+    //     if ($formId !== null) {
+    //         $exact = (clone $base)->where('form_id', $formId)->first();
+    //         if ($exact) return $exact;
+    //         $anyForm = (clone $base)->whereNull('form_id')->first();
+    //         if ($anyForm) return $anyForm;
+    //     }
+    //     return $base->whereNull('form_id')->first();
+    // }
+    
     private function findIntegration(?string $pageId, ?string $formId): ?MetaIntegration
     {
-        if (empty($pageId)) return null;
+        if (empty($pageId)) {
+            return null;
+        }
 
-        // TEST MODE: Agar Meta 44444 bhejta hai to pehla active integration le lo
+        // TEST MODE: Meta test IDs ke liye
         if ($pageId === '444444444444' || $formId === '444444444444') {
-            return MetaIntegration::where('status', true)->whereNotNull('page_id')->first();
+            return MetaIntegration::where('status', true)
+                ->whereNotNull('page_id')
+                ->first();
         }
 
-        // Normal logic
-        $base = MetaIntegration::where('page_id', $pageId)->where('status', true);
-        if ($formId !== null) {
-            $exact = (clone $base)->where('form_id', $formId)->first();
-            if ($exact) return $exact;
-            $anyForm = (clone $base)->whereNull('form_id')->first();
-            if ($anyForm) return $anyForm;
+        // STEP 1: Pehle exact Page ID + Form ID match karein
+        if (!empty($formId)) {
+            $exactMatch = MetaIntegration::where('page_id', $pageId)
+                ->where('form_id', $formId)
+                ->where('status', true)
+                ->first();
+
+            if ($exactMatch) {
+                return $exactMatch;
+            }
         }
-        return $base->whereNull('form_id')->first();
+
+        // STEP 2: Exact match nahi mila to sirf Page ID se check karein
+        $pageMatch = MetaIntegration::where('page_id', $pageId)
+            ->where('status', true)
+            ->first();
+
+        if ($pageMatch) {
+            return $pageMatch;
+        }
+
+        // STEP 3: Koi active integration nahi mili
+        return null;
     }
+
 
     private function processLead(MetaIntegration $integration, $metaLeadId, $pageId, $formId)
     {
