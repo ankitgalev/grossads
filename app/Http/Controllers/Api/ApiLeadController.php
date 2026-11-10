@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use App\Services\AdvertiserLeadDeliveryService;
+use Throwable;
 
 class ApiLeadController extends Controller
 {
@@ -227,7 +229,15 @@ class ApiLeadController extends Controller
 
                 return $lead;
             });
-
+            // Send lead to advertiser after publisher lead is saved.
+            try {
+                app(AdvertiserLeadDeliveryService::class)->createDelivery($lead);
+            } catch (Throwable $e) {
+                \Log::error('Advertiser lead forwarding failed.', [
+                    'lead_id' => isset($lead) ? $lead->id : null,
+                    'error' => $e->getMessage()
+                ]);
+            }
             return response()->json([
                 'success' => true,
                 'message' => 'Lead submitted successfully.',

@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\CampaignAssignmentController;
 use App\Http\Controllers\Admin\ApiDocsController;
 use App\Http\Controllers\AdvertiserDashboardControllers;
 use App\Http\Controllers\Admin\MetaIntegrationController;
+use App\Http\Controllers\Admin\BulkLeadImportController;
 
 
 /*
@@ -133,9 +134,25 @@ Route::prefix('admin')
 
         Route::get('leads', [LeadController::class, 'index'])
             ->name('leads.index');
+        // Bulk Lead Upload Routes
+        Route::get('leads/bulk-upload', [
+            \App\Http\Controllers\Admin\BulkLeadImportController::class,
+            'index'
+        ])->name('leads.bulk-upload.index');
+
+        Route::get('leads/bulk-upload/{campaignId}/publishers', [
+            \App\Http\Controllers\Admin\BulkLeadImportController::class,
+            'publishers'
+        ])->name('leads.bulk-upload.publishers');
+
+        Route::post('leads/bulk-upload', [
+            \App\Http\Controllers\Admin\BulkLeadImportController::class,
+            'store'
+        ])->name('leads.bulk-upload.store');
 
         Route::get('leads/{id}', [LeadController::class, 'show'])
             ->name('leads.show');
+        
 
         Route::patch('leads/{id}/status', [LeadController::class, 'updateStatus'])
             ->name('leads.status');
@@ -147,7 +164,8 @@ Route::prefix('admin')
             [CampaignPublisherController::class, 'create']
         )->name('campaigns.assign');
 
-
+        
+        
         Route::post(
             '/campaigns/{campaign}/assign',
             [CampaignPublisherController::class, 'store']

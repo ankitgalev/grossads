@@ -114,6 +114,62 @@ class CampaignController extends Controller
                 'max:2000'
             ],
 
+            'advertiser_delivery_enabled' => [
+                'nullable',
+                'boolean'
+            ],
+            'advertiser_delivery_mode' => [
+                'required',
+                'in:real_time,cron'
+            ],
+            'advertiser_delivery_status' => [
+                'required',
+                'in:new'
+            ],
+            'advertiser_api_url' => [
+                'nullable',
+                'url',
+                'max:2000'
+            ],
+            'advertiser_http_method' => [
+                'required',
+                'in:GET,POST,PUT,PATCH'
+            ],
+            'advertiser_payload_format' => [
+                'required',
+                'in:json,form,query'
+            ],
+            'advertiser_auth_type' => [
+                'required',
+                'in:none,bearer,api_key,basic,custom_headers'
+            ],
+            'advertiser_auth_config' => [
+                'nullable',
+                'json'
+            ],
+            'advertiser_field_mapping' => [
+                'nullable',
+                'json'
+            ],
+            'advertiser_timeout' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:120'
+            ],
+            'advertiser_retry_attempts' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:10'
+            ],
+            'advertiser_cron_batch_size' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:1000'
+            ],
+
             'fields' => [
                 'nullable',
                 'array'
@@ -221,6 +277,21 @@ class CampaignController extends Controller
                 'postback_url' => $validated[
                     'postback_url'
                 ] ?? null,
+
+                'advertiser_delivery_enabled' => $request->boolean('advertiser_delivery_enabled'),
+                'advertiser_delivery_mode' => $validated['advertiser_delivery_mode'],
+                'advertiser_delivery_status' => 'new',
+                'advertiser_api_url' => $validated['advertiser_api_url'] ?? null,
+                'advertiser_http_method' => $validated['advertiser_http_method'],
+                'advertiser_payload_format' => $validated['advertiser_payload_format'],
+                'advertiser_auth_type' => $validated['advertiser_auth_type'],
+                'advertiser_auth_config' => !empty($validated['advertiser_auth_config'])
+                    ? json_decode($validated['advertiser_auth_config'], true) : null,
+                'advertiser_field_mapping' => !empty($validated['advertiser_field_mapping'])
+                    ? json_decode($validated['advertiser_field_mapping'], true) : null,
+                'advertiser_timeout' => $validated['advertiser_timeout'],
+                'advertiser_retry_attempts' => $validated['advertiser_retry_attempts'],
+                'advertiser_cron_batch_size' => $validated['advertiser_cron_batch_size'],
             ]);
 
 
@@ -418,6 +489,62 @@ class CampaignController extends Controller
                 'max:2000'
             ],
 
+            'advertiser_delivery_enabled' => [
+                'nullable',
+                'boolean'
+            ],
+            'advertiser_delivery_mode' => [
+                'required',
+                'in:real_time,cron'
+            ],
+            'advertiser_delivery_status' => [
+                'required',
+                'in:new'
+            ],
+            'advertiser_api_url' => [
+                'nullable',
+                'url',
+                'max:2000'
+            ],
+            'advertiser_http_method' => [
+                'required',
+                'in:GET,POST,PUT,PATCH'
+            ],
+            'advertiser_payload_format' => [
+                'required',
+                'in:json,form,query'
+            ],
+            'advertiser_auth_type' => [
+                'required',
+                'in:none,bearer,api_key,basic,custom_headers'
+            ],
+            'advertiser_auth_config' => [
+                'nullable',
+                'json'
+            ],
+            'advertiser_field_mapping' => [
+                'nullable',
+                'json'
+            ],
+            'advertiser_timeout' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:120'
+            ],
+            'advertiser_retry_attempts' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:10'
+            ],
+            'advertiser_cron_batch_size' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:1000'
+            ],
+
             'fields' => [
                 'nullable',
                 'array'
@@ -454,7 +581,8 @@ class CampaignController extends Controller
 
         DB::transaction(function () use (
             $campaign,
-            $validated
+            $validated,
+            $request
         ) {
 
             $slug = Str::slug(
@@ -519,6 +647,21 @@ class CampaignController extends Controller
                 'postback_url' => $validated[
                     'postback_url'
                 ] ?? null,
+
+                'advertiser_delivery_enabled' => $request->boolean('advertiser_delivery_enabled'),
+                'advertiser_delivery_mode' => $validated['advertiser_delivery_mode'],
+                'advertiser_delivery_status' => 'new',
+                'advertiser_api_url' => $validated['advertiser_api_url'] ?? null,
+                'advertiser_http_method' => $validated['advertiser_http_method'],
+                'advertiser_payload_format' => $validated['advertiser_payload_format'],
+                'advertiser_auth_type' => $validated['advertiser_auth_type'],
+                'advertiser_auth_config' => !empty($validated['advertiser_auth_config'])
+                    ? json_decode($validated['advertiser_auth_config'], true) : null,
+                'advertiser_field_mapping' => !empty($validated['advertiser_field_mapping'])
+                    ? json_decode($validated['advertiser_field_mapping'], true) : null,
+                'advertiser_timeout' => $validated['advertiser_timeout'],
+                'advertiser_retry_attempts' => $validated['advertiser_retry_attempts'],
+                'advertiser_cron_batch_size' => $validated['advertiser_cron_batch_size'],
             ]);
 
 
@@ -528,8 +671,9 @@ class CampaignController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $campaign->fields()->delete();
-
+            if (array_key_exists('fields', $validated)) {
+                $campaign->fields()->delete();
+            }
 
             if (
                 !empty(

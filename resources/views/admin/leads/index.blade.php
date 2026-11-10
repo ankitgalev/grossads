@@ -9,9 +9,15 @@
             <h3>Lead Management</h3>
             <p class="text-muted mb-0">View and manage all submitted leads.</p>
         </div>
-        <a href="{{ route('admin.campaigns.index') }}" class="btn btn-secondary">
-            Back to Campaigns
-        </a>
+        <div>
+            <a href="{{ route('admin.leads.bulk-upload.index') }}" class="btn btn-success">
+                <i class="fas fa-file-upload"></i> Bulk Upload
+            </a>
+
+            <a href="{{ route('admin.campaigns.index') }}" class="btn btn-secondary">
+                Back to Campaigns
+            </a>
+        </div>
     </div>
 
     @if(session('success'))
@@ -171,13 +177,41 @@
                             <td>
                                 {{ optional($lead->advertiser)->company_name ?? 'N/A' }}
                             </td>
-                            <td>
+                            <!-- <td>
                                 @if($lead->status === 'approved')
                                     <span class="badge badge-success">Approved</span>
                                 @elseif($lead->status === 'rejected')
                                     <span class="badge badge-danger">Rejected</span>
                                 @else
                                     <span class="badge badge-primary">{{ ucfirst($lead->status) }}</span>
+                                @endif
+                            </td> -->
+                            <td>
+                                @if($lead->is_duplicate)
+                                    <span class="badge badge-warning">Duplicate</span>
+
+                                    @if($lead->duplicate_of_lead_id)
+                                        <br>
+                                        <small class="text-muted">
+                                            Original Lead:
+                                            #{{ $lead->duplicate_of_lead_id }}
+                                        </small>
+                                    @endif
+
+                                    @if($lead->duplicate_remark)
+                                        <br>
+                                        <small class="text-danger">
+                                            {{ $lead->duplicate_remark }}
+                                        </small>
+                                    @endif
+                                @else
+                                    @if($lead->status === 'approved')
+                                        <span class="badge badge-success">Approved</span>
+                                    @elseif($lead->status === 'rejected')
+                                        <span class="badge badge-danger">Rejected</span>
+                                    @else
+                                        <span class="badge badge-primary">{{ ucfirst($lead->status) }}</span>
+                                    @endif
                                 @endif
                             </td>
                             <td>{{ $lead->created_at ? $lead->created_at->format('d-m-Y H:i') : 'N/A' }}</td>
