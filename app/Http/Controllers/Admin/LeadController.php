@@ -16,7 +16,8 @@ class LeadController extends Controller
         $query = Lead::with([
             'campaign',
             'publisher',
-            'advertiser'
+            'advertiser',
+            'values.field'
         ]);
 
         // Search by lead reference, campaign or publisher.

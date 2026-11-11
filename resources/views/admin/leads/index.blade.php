@@ -158,6 +158,7 @@
                         <th>Campaign</th>
                         <th>Publisher</th>
                         <th>Advertiser</th>
+                        <th>Submitted Field Values</th>
                         <th>Status</th>
                         <th>Submitted</th>
                         <th>Action</th>
@@ -176,6 +177,19 @@
                             </td>
                             <td>
                                 {{ optional($lead->advertiser)->company_name ?? 'N/A' }}
+                            </td>
+                            <td style="min-width: 250px;">
+                                @forelse($lead->values as $leadValue)
+                                    <div class="mb-2">
+                                        <strong>
+                                            {{ optional($leadValue->field)->field_name ?? 'Field' }}:
+                                        </strong>
+
+                                        {{ $leadValue->field_value }}
+                                    </div>
+                                @empty
+                                    <span class="text-muted">No field values</span>
+                                @endforelse
                             </td>
                             <!-- <td>
                                 @if($lead->status === 'approved')
@@ -224,7 +238,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center py-4">
+                            <td colspan="9" class="text-center py-4">
                                 No leads found.
                             </td>
                         </tr>
