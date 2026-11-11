@@ -17,15 +17,17 @@ use App\Services\AdvertiserLeadDeliveryService;
 class BulkLeadsImport implements ToCollection, WithHeadingRow
 {
     protected $campaign;
+    protected $publisherId;
 
     public $importedCount = 0;
     public $duplicateCount = 0;
     public $skippedCount = 0;
     public $errors = [];
 
-    public function __construct(Campaign $campaign)
+    public function __construct(Campaign $campaign, $publisherId)
     {
         $this->campaign = $campaign->load('fields');
+        $this->publisherId = $publisherId;
     }
 
     public function collection(Collection $rows)
@@ -102,7 +104,7 @@ class BulkLeadsImport implements ToCollection, WithHeadingRow
 
                 $lead = Lead::create([
                     'campaign_id' => $this->campaign->id,
-                    'publisher_id' => null,
+                    'publisher_id' => $this->publisherId,
                     'advertiser_id' => $this->campaign->advertiser_id,
                     'lead_reference' => 'BULK-' . Str::uuid(),
                     'status' => 'new',
@@ -126,6 +128,11 @@ class BulkLeadsImport implements ToCollection, WithHeadingRow
                 if ($duplicate) {
                     $this->duplicateCount++;
                 } else {
+                     // Create advertiser delivery in CRON mode.
+                    // This will not send the lead immediately.
+                    app(AdvertiserLeadDeliveryService::class)
+                        ->createDelivery($lead, true);
+
                     $this->importedCount++;
                 }
             });

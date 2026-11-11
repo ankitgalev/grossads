@@ -48,6 +48,13 @@ return [
     */
 
     'channels' => [
+        'meta_leads' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/meta-leads/meta-leads.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'permission' => 0664,
+        ],
         'stack' => [
             'driver' => 'stack',
             'channels' => ['single'],

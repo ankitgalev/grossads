@@ -23,6 +23,11 @@ class MetaLeadWebhookController extends Controller
 
         $rawBody = $request->getContent();
         $payload = json_decode($rawBody, true);
+        Log::channel('meta_leads')->info('META WEBHOOK RECEIVED', [
+            'received_at' => now()->toDateTimeString(),
+            'ip' => $request->ip(),
+            'payload' => $payload,
+        ]);
 
         if (!is_array($payload) || !isset($payload['entry'])) {
             Log::warning('【entity-Meta¦canonical_name=Meta】 webhook: Invalid payload', ['body' => substr($rawBody, 0, 500)]);
@@ -73,8 +78,12 @@ class MetaLeadWebhookController extends Controller
                     $this->processLead($integration, $leadId, $eventPageId, $formId);
                 } catch (Throwable $e) {
                     $hasFailure = true;
-                    Log::error('【entity-Meta¦canonical_name=Meta】 lead processing failed.', [
-                        'leadgen_id' => $leadId, 'page_id' => $eventPageId, 'error' => $e->getMessage(),
+                    Log::channel('meta_leads')->error('META LEAD PROCESSING FAILED', [
+                        'leadgen_id' => $leadId,
+                        'page_id' => $eventPageId,
+                        'form_id' => $formId ?? null,
+                        'error' => $e->getMessage(),
+                        'failed_at' => now()->toDateTimeString(),
                     ]);
                     $log = MetaLeadLog::where('meta_lead_id', $leadId)->first();
                     if ($log) {
@@ -238,7 +247,12 @@ class MetaLeadWebhookController extends Controller
                     $existingLog->status = 'processed';
                     $existingLog->save();
                 });
-                Log::info('Test lead created successfully', ['lead_id' => $metaLeadId]);
+                Log::channel('meta_leads')->info('META TEST LEAD CREATED', [
+                    'meta_lead_id' => $metaLeadId,
+                    'grossads_lead_id' => $lead->id ?? null,
+                    'integration_id' => $integration->id,
+                    'created_at' => now()->toDateTimeString(),
+                ]);
             } catch (Throwable $e) {
                 $existingLog->status = 'failed';
                 $existingLog->error_message = $e->getMessage();
@@ -298,6 +312,20 @@ class MetaLeadWebhookController extends Controller
             }
 
             $metaData = $response->json();
+            // COMPLETE FACEBOOK LEAD RESPONSE LOG
+            Log::channel('meta_leads')->info('META COMPLETE LEAD DATA RECEIVED', [
+                'received_at' => now()->toDateTimeString(),
+
+                'integration_id' => $integration->id,
+
+                'page_id' => $pageId,
+                'form_id' => $formId,
+                'webhook_lead_id' => $metaLeadId,
+
+                // Facebook se aane wali complete lead details
+                'facebook_lead_data' => $metaData,
+            ]);
+
             if (!is_array($metaData) || empty($metaData['id'])) {
                 throw new \RuntimeException('【entity-Meta¦canonical_name=Meta】 API response did not contain a lead ID.');
             }
@@ -355,6 +383,15 @@ class MetaLeadWebhookController extends Controller
                 $existingLog->error_message = null;
                 $existingLog->save();
             });
+            Log::channel('meta_leads')->info('META LEAD SAVED SUCCESSFULLY', [
+                'meta_lead_id' => $metaLeadId,
+                'grossads_lead_id' => $lead->id ?? null,
+                'campaign_id' => $campaign->id,
+                'publisher_id' => $integration->publisher_id,
+                'integration_id' => $integration->id,
+                'status' => 'processed',
+                'processed_at' => now()->toDateTimeString(),
+            ]);
         } catch (Throwable $e) {
             $existingLog->status = 'failed';
             $existingLog->error_message = substr($e->getMessage(), 0, 60000);
