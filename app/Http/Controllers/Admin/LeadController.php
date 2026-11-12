@@ -8,57 +8,98 @@ use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Exports\LeadsExport;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 
 class LeadController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     $query = Lead::with([
+    //         'campaign',
+    //         'publisher',
+    //         'advertiser',
+    //         'values.field'
+    //     ]);
+
+    //     // Search by lead reference, campaign or publisher.
+    //     if ($request->filled('search')) {
+    //         $search = trim($request->input('search'));
+
+    //         $query->where(function ($q) use ($search) {
+    //             $q->where('lead_reference', 'like', '%' . $search . '%')
+    //               ->orWhereHas('campaign', function ($campaignQuery) use ($search) {
+    //                   $campaignQuery->where('name', 'like', '%' . $search . '%');
+    //               })
+    //               ->orWhereHas('publisher', function ($publisherQuery) use ($search) {
+    //                   $publisherQuery->where('name', 'like', '%' . $search . '%')
+    //                       ->orWhere('email', 'like', '%' . $search . '%');
+    //               });
+    //         });
+    //     }
+
+    //     if ($request->filled('campaign_id')) {
+    //         $query->where('campaign_id', $request->campaign_id);
+    //     }
+
+    //     if ($request->filled('publisher_id')) {
+    //         $query->where('publisher_id', $request->publisher_id);
+    //     }
+
+    //     if ($request->filled('status')) {
+    //         $query->where('status', $request->status);
+    //     }
+
+    //     if ($request->filled('date_from')) {
+    //         $query->whereDate('created_at', '>=', $request->date_from);
+    //     }
+
+    //     if ($request->filled('date_to')) {
+    //         $query->whereDate('created_at', '<=', $request->date_to);
+    //     }
+
+    //     $leads = $query->orderBy('id', 'desc')
+    //         ->paginate(20)
+    //         ->appends($request->query());
+
+    //     $campaigns = Campaign::orderBy('name')->get();
+
+    //     $publishers = User::where('role', 'publisher')
+    //         ->orderBy('name')
+    //         ->get();
+
+    //     $totalLeads = Lead::count();
+    //     $newLeads = Lead::where('status', 'new')->count();
+    //     $approvedLeads = Lead::where('status', 'approved')->count();
+    //     $rejectedLeads = Lead::where('status', 'rejected')->count();
+
+    //     return view('admin.leads.index', compact(
+    //         'leads',
+    //         'campaigns',
+    //         'publishers',
+    //         'totalLeads',
+    //         'newLeads',
+    //         'approvedLeads',
+    //         'rejectedLeads'
+    //     ));
+    // }
     public function index(Request $request)
     {
-        $query = Lead::with([
-            'campaign',
-            'publisher',
-            'advertiser',
-            'values.field'
-        ]);
-
-        // Search by lead reference, campaign or publisher.
-        if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-
-            $query->where(function ($q) use ($search) {
-                $q->where('lead_reference', 'like', '%' . $search . '%')
-                  ->orWhereHas('campaign', function ($campaignQuery) use ($search) {
-                      $campaignQuery->where('name', 'like', '%' . $search . '%');
-                  })
-                  ->orWhereHas('publisher', function ($publisherQuery) use ($search) {
-                      $publisherQuery->where('name', 'like', '%' . $search . '%')
-                          ->orWhere('email', 'like', '%' . $search . '%');
-                  });
-            });
-        }
-
-        if ($request->filled('campaign_id')) {
-            $query->where('campaign_id', $request->campaign_id);
-        }
-
-        if ($request->filled('publisher_id')) {
-            $query->where('publisher_id', $request->publisher_id);
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date_to);
-        }
-
-        $leads = $query->orderBy('id', 'desc')
+        $leads = $this->filteredLeadsQuery($request)
             ->paginate(20)
             ->appends($request->query());
+
+        // Current page par available dynamic field names.
+        $fieldNames = $leads->getCollection()
+            ->flatMap(function ($lead) {
+                return $lead->values->map(function ($value) {
+                    return optional($value->field)->field_name;
+                });
+            })
+            ->filter()
+            ->unique()
+            ->values();
 
         $campaigns = Campaign::orderBy('name')->get();
 
@@ -78,9 +119,11 @@ class LeadController extends Controller
             'totalLeads',
             'newLeads',
             'approvedLeads',
-            'rejectedLeads'
+            'rejectedLeads',
+            'fieldNames'
         ));
     }
+
 
     public function show($id)
     {
@@ -110,6 +153,88 @@ class LeadController extends Controller
         return redirect()
             ->route('admin.leads.index')
             ->with('success', 'Lead status updated successfully.');
+    }
+    // Excel and CSV export
+    public function export(Request $request, $format)
+    {
+        if (!in_array($format, ['excel', 'csv'])) {
+            abort(404);
+        }
+
+        // Export all matching records, not just the current page.
+        $leads = $this->filteredLeadsQuery($request)->get();
+
+        $fieldNames = $leads->flatMap(function ($lead) {
+            return $lead->values->map(function ($value) {
+                return optional($value->field)->field_name;
+            });
+        })->filter()->unique()->values();
+
+        $export = new LeadsExport($leads, $fieldNames);
+
+        $fileName = 'grossads-leads-' . date('Y-m-d-His');
+
+        if ($format === 'csv') {
+            return Excel::download(
+                $export,
+                $fileName . '.csv',
+                ExcelFormat::CSV
+            );
+        }
+
+        return Excel::download(
+            $export,
+            $fileName . '.xlsx',
+            ExcelFormat::XLSX
+        );
+    }
+
+    // Common query for listing and export filters.
+    private function filteredLeadsQuery(Request $request)
+    {
+        $query = Lead::with([
+            'campaign',
+            'publisher',
+            'advertiser',
+            'values.field'
+        ]);
+
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+
+            $query->where(function ($q) use ($search) {
+                $q->where('lead_reference', 'like', '%' . $search . '%')
+                    ->orWhereHas('campaign', function ($campaignQuery) use ($search) {
+                        $campaignQuery->where('name', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('publisher', function ($publisherQuery) use ($search) {
+                        $publisherQuery->where('name', 'like', '%' . $search . '%')
+                            ->orWhere('email', 'like', '%' . $search . '%');
+                    });
+            });
+        }
+
+        if ($request->filled('campaign_id')) {
+            $query->where('campaign_id', $request->campaign_id);
+        }
+
+        if ($request->filled('publisher_id')) {
+            $query->where('publisher_id', $request->publisher_id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        return $query->orderBy('id', 'desc');
     }
 }
 

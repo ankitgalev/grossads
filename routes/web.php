@@ -152,7 +152,7 @@ Route::prefix('admin')
 
         Route::get('leads/{id}', [LeadController::class, 'show'])
             ->name('leads.show');
-        
+        Route::get('leads/export/{format}', [LeadController::class, 'export'])->name('leads.export');
 
         Route::patch('leads/{id}/status', [LeadController::class, 'updateStatus'])
             ->name('leads.status');

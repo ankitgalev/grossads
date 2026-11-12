@@ -144,62 +144,78 @@
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <strong>All Leads</strong>
-            <span class="text-muted">({{ $leads->total() }} matching records)</span>
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <strong>All Leads</strong>
+                <span class="text-muted">
+                    ({{ $leads->total() }} matching records)
+                </span>
+            </div>
+
+            <div class="mt-2 mt-md-0">
+                <a href="{{ route('admin.leads.export', array_merge(['format' => 'excel'], request()->query())) }}"
+                class="btn btn-success btn-sm">
+                    <i class="fas fa-file-excel"></i> Download Excel
+                </a>
+
+                <a href="{{ route('admin.leads.export', array_merge(['format' => 'csv'], request()->query())) }}"
+                class="btn btn-primary btn-sm">
+                    <i class="fas fa-file-csv"></i> Download CSV
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
             <table class="table table-bordered table-hover mb-0">
+                
                 <thead class="thead-light">
                     <tr>
                         <th>ID</th>
-                        <th>Lead Reference</th>
                         <th>Campaign</th>
                         <th>Publisher</th>
                         <th>Advertiser</th>
-                        <th>Submitted Field Values</th>
+
+                        @foreach($fieldNames as $fieldName)
+                            <th>{{ $fieldName }}</th>
+                        @endforeach
+
                         <th>Status</th>
                         <th>Submitted</th>
                         <th>Action</th>
                     </tr>
                 </thead>
+
                 <tbody>
                     @forelse($leads as $lead)
                         <tr>
                             <td>{{ $lead->id }}</td>
-                            <td><code>{{ $lead->lead_reference }}</code></td>
-                            <td>{{ optional($lead->campaign)->name ?? 'N/A' }}</td>
+
+                            <td>
+                                {{ optional($lead->campaign)->name ?? 'N/A' }}
+                            </td>
+
                             <td>
                                 {{ optional($lead->publisher)->name
                                     ?? optional($lead->publisher)->email
                                     ?? 'N/A' }}
                             </td>
+
                             <td>
                                 {{ optional($lead->advertiser)->company_name ?? 'N/A' }}
                             </td>
-                            <td style="min-width: 250px;">
-                                @forelse($lead->values as $leadValue)
-                                    <div class="mb-2">
-                                        <strong>
-                                            {{ optional($leadValue->field)->field_name ?? 'Field' }}:
-                                        </strong>
 
-                                        {{ $leadValue->field_value }}
-                                    </div>
-                                @empty
-                                    <span class="text-muted">No field values</span>
-                                @endforelse
-                            </td>
-                            <!-- <td>
-                                @if($lead->status === 'approved')
-                                    <span class="badge badge-success">Approved</span>
-                                @elseif($lead->status === 'rejected')
-                                    <span class="badge badge-danger">Rejected</span>
-                                @else
-                                    <span class="badge badge-primary">{{ ucfirst($lead->status) }}</span>
-                                @endif
-                            </td> -->
+                            @foreach($fieldNames as $fieldName)
+                                @php
+                                    $matchedValue = $lead->values->first(function ($value) use ($fieldName) {
+                                        return optional($value->field)->field_name === $fieldName;
+                                    });
+                                @endphp
+
+                                <td>
+                                    {{ $matchedValue->field_value ?? '-' }}
+                                </td>
+                            @endforeach
+
                             <td>
                                 @if($lead->is_duplicate)
                                     <span class="badge badge-warning">Duplicate</span>
@@ -207,8 +223,7 @@
                                     @if($lead->duplicate_of_lead_id)
                                         <br>
                                         <small class="text-muted">
-                                            Original Lead:
-                                            #{{ $lead->duplicate_of_lead_id }}
+                                            Original Lead: #{{ $lead->duplicate_of_lead_id }}
                                         </small>
                                     @endif
 
@@ -224,26 +239,36 @@
                                     @elseif($lead->status === 'rejected')
                                         <span class="badge badge-danger">Rejected</span>
                                     @else
-                                        <span class="badge badge-primary">{{ ucfirst($lead->status) }}</span>
+                                        <span class="badge badge-primary">
+                                            {{ ucfirst($lead->status) }}
+                                        </span>
                                     @endif
                                 @endif
                             </td>
-                            <td>{{ $lead->created_at ? $lead->created_at->format('d-m-Y H:i') : 'N/A' }}</td>
+
+                            <td>
+                                {{ $lead->created_at
+                                    ? $lead->created_at->format('d-m-Y H:i')
+                                    : 'N/A' }}
+                            </td>
+
                             <td>
                                 <a href="{{ route('admin.leads.show', $lead->id) }}"
-                                   class="btn btn-sm btn-info">
+                                class="btn btn-sm btn-info">
                                     View
                                 </a>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="text-center py-4">
+                            <td colspan="{{ 7 + $fieldNames->count() }}"
+                                class="text-center py-4">
                                 No leads found.
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
+
             </table>
         </div>
 
