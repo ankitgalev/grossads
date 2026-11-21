@@ -51,6 +51,8 @@
 
                             <th>Leads</th>
 
+                            <th>Total Campaign Budget</th>
+
                             <th>Publisher Payout</th>
 
                             <th>Advertiser Price</th>
@@ -107,6 +109,16 @@
                                 <span class="badge bg-info">
 
                                     {{ $campaign->leads_count }}
+
+                                </span>
+
+                            </td>
+
+                            <td>
+
+                                <span class="badge bg-info">
+
+                                    ₹{{ number_format((float) ($campaign->budget ?? 0), 2) }}
 
                                 </span>
 

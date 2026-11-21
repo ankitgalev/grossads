@@ -77,6 +77,7 @@
                 <input type="hidden" name="campaign_type" value="{{ $campaign->campaign_type }}">
                 <input type="hidden" name="publisher_payout" value="{{ $campaign->publisher_payout }}">
                 <input type="hidden" name="advertiser_price" value="{{ $campaign->advertiser_price }}">
+                
 
                 <div class="row">
 
@@ -171,6 +172,22 @@
 
                         </select>
 
+                    </div>
+                    <div class="form-group">
+                        <label for="budget">Campaign Total Budget (₹)</label>
+                        <input
+                            type="number"
+                            name="budget"
+                            id="budget"
+                            class="form-control"
+                            value="{{ old('budget', $campaign->budget ?? 0) }}"
+                            min="0"
+                            step="0.01"
+                            placeholder="Enter total campaign budget"
+                        >
+                        @error('budget')
+                            <span class="text-danger">{{ $message }}</span>
+                        @enderror
                     </div>
 
 

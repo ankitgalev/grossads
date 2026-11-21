@@ -107,6 +107,11 @@ class CampaignController extends Controller
                 'numeric',
                 'min:0'
             ],
+            'budget' => [
+                'nullable',
+                'numeric',
+                'min:0'
+            ],
 
             'postback_url' => [
                 'nullable',
@@ -273,6 +278,8 @@ class CampaignController extends Controller
                 'advertiser_price' => $validated[
                     'advertiser_price'
                 ] ?? 0,
+
+                'budget' => $validated['budget'] ?? 0,
 
                 'postback_url' => $validated[
                     'postback_url'
@@ -483,6 +490,12 @@ class CampaignController extends Controller
                 'min:0'
             ],
 
+            'budget' => [
+                'nullable',
+                'numeric',
+                'min:0'
+            ],
+
             'postback_url' => [
                 'nullable',
                 'url',
@@ -643,6 +656,8 @@ class CampaignController extends Controller
                 'advertiser_price' => $validated[
                     'advertiser_price'
                 ] ?? 0,
+
+                'budget' => $validated['budget'] ?? 0,
 
                 'postback_url' => $validated[
                     'postback_url'

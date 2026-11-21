@@ -17,6 +17,7 @@ class Campaign extends Model
         'status',
         'publisher_payout',
         'advertiser_price',
+        'budget',
         'postback_url',
         'advertiser_delivery_enabled',
         'advertiser_delivery_mode',
@@ -35,6 +36,7 @@ class Campaign extends Model
     protected $casts = [
         'publisher_payout' => 'decimal:2',
         'advertiser_price' => 'decimal:2',
+        'budget' => 'decimal:2',
         'advertiser_delivery_enabled' => 'boolean',
         'advertiser_auth_config' => 'array',
         'advertiser_field_mapping' => 'array',

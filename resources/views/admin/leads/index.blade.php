@@ -178,6 +178,9 @@
                         @foreach($fieldNames as $fieldName)
                             <th>{{ $fieldName }}</th>
                         @endforeach
+                        <th>Campaign</th>
+                        <th>Publisher</th>
+                        <th>Advertiser</th>
 
                         <th>Status</th>
                         <th>Submitted</th>
@@ -215,7 +218,19 @@
                                     {{ $matchedValue->field_value ?? '-' }}
                                 </td>
                             @endforeach
+                            <td>
+                                {{ optional($lead->campaign)->name ?? 'N/A' }}
+                            </td>
 
+                            <td>
+                                {{ optional($lead->publisher)->name
+                                    ?? optional($lead->publisher)->email
+                                    ?? 'N/A' }}
+                            </td>
+
+                            <td>
+                                {{ optional($lead->advertiser)->company_name ?? 'N/A' }}
+                            </td>
                             <td>
                                 @if($lead->is_duplicate)
                                     <span class="badge badge-warning">Duplicate</span>

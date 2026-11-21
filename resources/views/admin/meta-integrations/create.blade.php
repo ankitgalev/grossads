@@ -103,19 +103,19 @@
                 <div class="form-group">
                     <label>Meta App Secret</label>
                     <input type="password" name="app_secret" class="form-control"
-                           autocomplete="new-password" required>
+                           autocomplete="new-password" value="ffdb09879bd243869304d337b62718ae" required>
                 </div>
 
                 <div class="form-group">
                     <label>Page Access Token</label>
                     <textarea name="page_access_token" class="form-control"
-                              rows="3" autocomplete="off" required>{{ old('page_access_token') }}</textarea>
+                              rows="3" autocomplete="off" required>EAAUfK6Ah1X8BS1S3Kp9f9vlR6yQRT9DaRE1O5DZBcMwZBDMG9gtZCrErwJZBN5jMLPsXgZCTY9s1AVuj207LqZCdbCOfEV3ejjZAvgPB0EXZB3Pz8ro7z8scdjZCJvZBFZB5TeH1xkFvEr8FA3WPva91rfrXyZBJZA6PgRZA638J2rh7H3m8rpb5kDOU99RDR4OyGQTJM4pQZDZD</textarea>
                 </div>
 
                 <div class="form-group">
                     <label>Webhook Verify Token</label>
                     <input type="text" name="verify_token" class="form-control"
-                           value="{{ old('verify_token') }}" required>
+                           value="GrossAdsLeadIntegration0099774567" required>
                     <small class="text-muted">
                         Create your own long, random value. You will enter the same value in Meta Webhooks settings.
                     </small>

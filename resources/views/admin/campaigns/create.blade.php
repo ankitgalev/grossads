@@ -221,6 +221,23 @@
 
                             </div>
 
+                            <div class="form-group">
+                                <label for="budget">Campaign Total Budget (₹)</label>
+                                <input
+                                    type="number"
+                                    name="budget"
+                                    id="budget"
+                                    class="form-control"
+                                    value="{{ old('budget', 0) }}"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Enter total campaign budget"
+                                >
+                                @error('budget')
+                                    <span class="text-danger">{{ $message }}</span>
+                                @enderror
+                            </div>
+
 
                             <div class="col-12 mb-3">
 

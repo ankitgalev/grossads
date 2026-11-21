@@ -140,6 +140,16 @@
 
                     </p>
 
+                    <p>
+                        <strong>
+                            Total Campaign Budget:
+                        </strong>
+
+                        <span class="text-success font-weight-bold">
+                            ₹{{ number_format((float) ($campaign->budget ?? 0), 2) }}
+                        </span>
+                    </p>
+
 
                     @if($campaign->description)
 
