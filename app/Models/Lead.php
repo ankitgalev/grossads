@@ -17,6 +17,8 @@ class Lead extends Model
         'is_duplicate',
         'duplicate_of_lead_id',
         'duplicate_remark',
+        'is_junk',
+        'junk_remark',
         'source',
         'ip_address',
         'user_agent',
@@ -26,6 +28,7 @@ class Lead extends Model
     protected $casts = [
         'submitted_at' => 'datetime',
         'is_duplicate' => 'boolean',
+        'is_junk' => 'boolean',
     ];
 
     public function advertiserDelivery()

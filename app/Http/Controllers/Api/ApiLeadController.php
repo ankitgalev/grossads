@@ -187,7 +187,132 @@ class ApiLeadController extends Controller
                 $input
             ) {
                 $reference = 'GA' . strtoupper(Str::random(14));
+                // Duplicate detection: same campaign, last 90 days.
+                $duplicateLead = null;
+                $duplicateRemark = null;
 
+                $phoneEmailFields = $fields->filter(function ($field) {
+                    return in_array($field->field_type, ['phone', 'email']);
+                });
+
+                $phoneEmailValues = [];
+
+                foreach ($phoneEmailFields as $field) {
+                    $key = $field->field_key;
+
+                    if (!isset($input[$key]) || trim((string) $input[$key]) === '') {
+                        continue;
+                    }
+
+                    $value = strtolower(trim((string) $input[$key]));
+
+                    if ($field->field_type === 'phone') {
+                        $value = preg_replace('/\D+/', '', $value);
+                    }
+
+                    $phoneEmailValues[$field->id] = [
+                        'type' => $field->field_type,
+                        'value' => $value
+                    ];
+                }
+
+                $recentLeadIds = Lead::where('campaign_id', $campaign->id)
+                    ->where('created_at', '>=', now()->subDays(90))
+                    ->pluck('id');
+
+                if ($recentLeadIds->isNotEmpty() && !empty($phoneEmailValues)) {
+                    $existingValues = LeadValue::whereIn('lead_id', $recentLeadIds)
+                        ->whereIn('campaign_field_id', array_keys($phoneEmailValues))
+                        ->get();
+
+                    foreach ($existingValues as $existingValue) {
+                        $fieldData = $phoneEmailValues[$existingValue->campaign_field_id] ?? null;
+
+                        if (!$fieldData) {
+                            continue;
+                        }
+
+                        $oldValue = strtolower(trim((string) $existingValue->field_value));
+
+                        if ($fieldData['type'] === 'phone') {
+                            $oldValue = preg_replace('/\D+/', '', $oldValue);
+                        }
+
+                        if (
+                            $oldValue !== '' &&
+                            $oldValue === $fieldData['value']
+                        ) {
+                            $duplicateLead = Lead::find($existingValue->lead_id);
+
+                            if ($duplicateLead) {
+                                $duplicateRemark = 'Duplicate ' .
+                                    $fieldData['type'] .
+                                    ' matched within the same campaign in the last 90 days.';
+                                break;
+                            }
+                        }
+                    }
+                }
+
+
+                //duplicate check end
+                // Junk lead detection
+                $isJunk = false;
+                $junkReasons = [];
+
+                foreach ($fields as $field) {
+                    $key = $field->field_key;
+
+                    if (!isset($input[$key]) || trim((string) $input[$key]) === '') {
+                        continue;
+                    }
+
+                    $value = trim((string) $input[$key]);
+                    $lowerValue = strtolower($value);
+
+                    // Invalid phone
+                    if ($field->field_type === 'phone') {
+                        $digits = preg_replace('/\D+/', '', $value);
+
+                        if (strlen($digits) < 10 || strlen($digits) > 15) {
+                            $isJunk = true;
+                            $junkReasons[] = 'Invalid phone number';
+                        }
+                    }
+
+                    // Fake email
+                    if ($field->field_type === 'email') {
+                        if (
+                            !filter_var($value, FILTER_VALIDATE_EMAIL) ||
+                            preg_match('/@(example\.com|test\.com|fake\.com|mailinator\.com)$/i', $value)
+                        ) {
+                            $isJunk = true;
+                            $junkReasons[] = 'Invalid or suspicious email';
+                        }
+                    }
+
+                    // Test/demo data
+                    if (preg_match('/\b(test|testing|demo|dummy|fake|sample|asdf|qwerty)\b/i', $lowerValue)) {
+                        $isJunk = true;
+                        $junkReasons[] = 'Test or demo data detected';
+                    }
+
+                    // Random text: long strings without meaningful spaces/vowels
+                    if (
+                        in_array($field->field_type, ['text', 'textarea']) &&
+                        strlen($value) >= 12 &&
+                        !preg_match('/\s/', $value) &&
+                        !preg_match('/[aeiou]/i', $value)
+                    ) {
+                        $isJunk = true;
+                        $junkReasons[] = 'Suspicious random text detected';
+                    }
+                }
+
+                $junkRemark = !empty($junkReasons)
+                    ? implode(', ', array_unique($junkReasons))
+                    : null;
+                //Junk Lead detuction finish
                 $lead = Lead::create([
                     'campaign_id' => $campaign->id,
                     'publisher_id' => $assignment->publisher_id,
@@ -201,6 +326,11 @@ class ApiLeadController extends Controller
                         0,
                         1000
                     ),
+                    'is_duplicate' => $duplicateLead ? 1 : 0,
+                    'duplicate_of_lead_id' => $duplicateLead ? $duplicateLead->id : null,
+                    'duplicate_remark' => $duplicateRemark,
+                    'is_junk' => $isJunk ? 1 : 0,
+                    'junk_remark' => $junkRemark,
                     'submitted_at' => now()
                 ]);
 
